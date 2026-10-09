@@ -52,7 +52,8 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.components.event import EventEntity
+from homeassistant.components.event import (
+    DoorbellEventType, EventDeviceClass, EventEntity)
 
 from .miot.miot_spec import MIoTSpecEvent
 from .miot.miot_device import MIoTDevice, MIoTEventEntity
@@ -87,6 +88,19 @@ class Event(MIoTEventEntity, EventEntity):
         super().__init__(miot_device=miot_device, spec=spec)
         # Set device_class
         self._attr_device_class = spec.device_class
+        # Declare the standard 'ring' event type for doorbell events
+        # (fork change). HA core requires a doorbell event entity to
+        # support the 'ring' event type (logged as a repair warning,
+        # unsupported from HA 2027.4). Only the declared capability list
+        # is extended; the event type fired on trigger stays the
+        # translated spec description, so existing automations that match
+        # on it keep working.
+        if (
+            spec.device_class == EventDeviceClass.DOORBELL
+            and DoorbellEventType.RING not in self._attr_event_types
+        ):
+            self._attr_event_types = [
+                *self._attr_event_types, DoorbellEventType.RING]
 
     def on_event_occurred(
         self, name: str, arguments: dict[str, Any] | None = None
