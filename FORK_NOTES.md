@@ -65,6 +65,24 @@ from=时间戳→to=unavailable 的 state 触发器被误触发（灯被误 togg
     弹跳只会误触发自动化）；设备在线状态仍可看其它实体。ONLINE 转换仍然生效，
     启动时就离线的实体恢复在线后能变回 available。
 
+### 4. HA 2026.10 启动日志治理（基于 v0.5.0）
+
+三项均不改变设备控制逻辑：
+
+- 门铃 event 实体合规（`event.py`）：HA core 要求 `device_class=doorbell` 的
+  event 实体 `event_types` 必须包含 `ring`（2027.4 起停止工作）。仅给门铃事件的
+  `event_types` 列表追加 `ring`，触发时实际发出的 event_type 仍是 spec 翻译名，
+  已有自动化不受影响。
+- device_tracker 废弃属性（`device_tracker.py` + `miot/specs/specv2entity.py`）：
+  core 废弃 `TrackerEntity` 的 `battery_level` 和 `location_name`
+  （`_attr_location_name` 同样废弃，2027.7 起不支持）。删除两个 property
+  override；watch 的 battery 服务不再并入 tracker，`battery-level` 回落为独立的
+  电量 sensor 实体（core 推荐方向）。对外变化：tracker 失去 `battery_level`
+  属性（电量改看新 sensor）、state 不再用 area-id 当位置名（改由经纬度+zone 推导）。
+- 日志降噪（`miot/miot_device.py`）：`new miot service/property/event entity`
+  三条从 INFO 降为 DEBUG（同 54289bb 风格），一次重启少 200+ 条，
+  消除 core 的 logging-too-frequently 警告。
+
 ## 发版流程（HACS 自定义仓库）
 
 本 fork 已作为 HACS 自定义仓库接入家里的 HA，发版即可在 HACS 里收到更新提示。
