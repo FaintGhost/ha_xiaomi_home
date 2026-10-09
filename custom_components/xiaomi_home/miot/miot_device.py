@@ -1244,6 +1244,11 @@ class MIoTServiceEntity(Entity):
     ) -> None:
         state_new = state == MIoTDeviceState.ONLINE
         if state_new == self._attr_available:
+            if state_new:
+                # Already online: re-sync property values anyway. Updates
+                # published while the cloud connection was down are lost
+                # and are not replayed on reconnect.
+                self.__refresh_props_value()
             return
         self._attr_available = state_new
         if not self._attr_available:

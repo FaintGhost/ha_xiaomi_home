@@ -1104,6 +1104,15 @@ class MIoTClient:
             for did in list(self._device_list_cache.keys()):
                 self._mips_cloud.sub_device_state(
                     did=did, handler=self.__on_cloud_device_state_changed)
+                # Re-sync property values on reconnect. Property updates
+                # published while the connection was down are not replayed
+                # by the broker, so notify devices that stayed online and
+                # let their entities refresh the values.
+                if not self._device_list_cache[did].get('online', False):
+                    continue
+                sub = self._sub_device_state.get(did, None)
+                if sub and sub.handler:
+                    sub.handler(did, MIoTDeviceState.ONLINE, sub.handler_ctx)
         else:
             # Disconnect
             for did, info in self._device_list_cloud.items():
@@ -1492,6 +1501,14 @@ class MIoTClient:
             })
 
         self.__request_show_devices_changed_notify()
+
+        # Periodically re-sync the device list. The cloud does not reliably
+        # publish online-state messages for BLE Mesh devices, so a missed
+        # notification would otherwise leave a device unavailable until the
+        # next reconnect or restart.
+        self._refresh_cloud_devices_timer = self._main_loop.call_later(
+            1800, lambda: self._main_loop.create_task(
+                self.__refresh_cloud_devices_async()))
 
     @final
     async def __refresh_cloud_device_with_dids_async(
