@@ -41,7 +41,42 @@ git push origin custom-fixes
 
 如果上游已修复相同问题，直接用 `git checkout main -- <文件>` 丢弃对应私有改动。
 
-## 部署到 HA
+### 2. 日志降噪（基于 v0.5.0）
+
+BLE 设备经网关推送的属性/事件用老式数字名（4100/4102/4106），映射不到 MIoT spec
+会被丢弃——功能无影响（实体靠轮询更新），但每条都写 INFO 日志，几秒一条刷屏。
+改动：miot_mips.py 中 `unknown prop msg` / `unknown event msg` / `wrong event msg`
+三处从 `log_info` 降为 `log_debug`。
+
+## 发版流程（HACS 自定义仓库）
+
+本 fork 已作为 HACS 自定义仓库接入家里的 HA，发版即可在 HACS 里收到更新提示。
+
+版本号规则：在上游版本号后加第四位递增（上游 v0.5.0 → 我们 v0.5.0.1、v0.5.0.2…；
+上游出 v0.5.1 并同步后，从 v0.5.1.1 开始）。不要用 `-custom.x` 后缀，
+语义化版本里那是预发布，排序比正式版低，HACS 不认。
+
+```bash
+git checkout custom-fixes
+# 1. 改代码、提交修复
+# 2.  bump manifest 版本号
+#    编辑 custom_components/xiaomi_home/manifest.json 的 "version" 字段
+git add -A && git commit -m "chore: bump version to vX.Y.Z.N"
+# 3. 打 tag 并推送
+git tag -a vX.Y.Z.N -m "vX.Y.Z.N - <一句话说明>"
+git push origin custom-fixes vX.Y.Z.N
+# 4. 发 release（HACS 以 release 为准）
+gh release create vX.Y.Z.N --repo FaintGhost/ha_xiaomi_home --title "vX.Y.Z.N" --notes "<更新内容>"
+```
+
+HA 侧更新：HACS → 找到 Xiaomi Home（FaintGhost fork）→ Update → 重启 HA。
+
+首次接入方式：HACS → 右上角 ⋯ → Custom repositories →
+URL `https://github.com/FaintGhost/ha_xiaomi_home`，类型 Integration → 添加。
+若之前装的是官方仓库版本，先在 HACS 里对官方条目 Remove（只删代码目录，
+配置和实体都在 .storage 里不受影响），再从 fork 条目 Download，重启 HA。
+
+## 部署到 HA（无 HACS 的手动方式，备用）
 
 HA 是 HA OS，配置目录经 Samba 挂载（`//192.168.50.86/config`）。
 
