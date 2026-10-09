@@ -1376,14 +1376,16 @@ class MIoTClient:
         else:
             self.__show_client_error_notify(
                 message=None, notify_key='device_cache')
-        # Set default online status = False
-        self._device_list_cache = {}
-        for did, info in cache_list.items():
-            if info.get('online', None):
-                self._device_list_cache[did] = {
-                    **info, 'online': False}
-            else:
-                self._device_list_cache[did] = info
+        # Keep the last-known online status from the cache instead of
+        # forcing every device offline at load (fork change). Upstream
+        # resets 'online' to False here, so at every integration reload /
+        # HA restart all entities start unavailable and only flip back
+        # online after the first cloud/gateway refresh. For event entities
+        # (e.g. wireless switch clicks) this timestamp -> unavailable ->
+        # timestamp flap misfires state triggers in automations. A device
+        # that went away while HA was down is still marked offline by the
+        # device refresh right after setup.
+        self._device_list_cache = deepcopy(cache_list)
         self._device_list_cloud = deepcopy(self._device_list_cache)
         self._device_list_gateway = {
             did: {

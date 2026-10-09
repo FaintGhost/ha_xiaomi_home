@@ -48,6 +48,23 @@ BLE 设备经网关推送的属性/事件用老式数字名（4100/4102/4106）�
 改动：miot_mips.py 中 `unknown prop msg` / `unknown event msg` / `wrong event msg`
 三处从 `log_info` 降为 `log_debug`。
 
+### 3. 事件实体 unavailable 弹跳修复（基于 v0.5.0）
+
+现象：每次集成重载 / HA 重启 / 中枢网关或云 mips 断线重连时，`event.*` 实体
+（无线开关 click 等）状态从「上次事件时间戳」跳变为 `unavailable` 再跳回，
+from=时间戳→to=unavailable 的 state 触发器被误触发（灯被误 toggle）。
+
+改动：
+
+- `miot/miot_client.py` `__load_cache_device_async`
+  - 加载缓存设备列表时保留上次在线状态，不再强制 `online=False`。上游强制离线
+    导致每次重载/重启所有实体先 unavailable、等云端/网关刷新后才恢复在线。
+    真正离线的设备仍会被加载后的首次设备刷新标记为离线。
+- `miot/miot_device.py` `MIoTEventEntity.__on_device_state_changed`
+  - 事件实体不再因设备离线而被标记 unavailable（其状态是历史事件时间戳，
+    弹跳只会误触发自动化）；设备在线状态仍可看其它实体。ONLINE 转换仍然生效，
+    启动时就离线的实体恢复在线后能变回 available。
+
 ## 发版流程（HACS 自定义仓库）
 
 本 fork 已作为 HACS 自定义仓库接入家里的 HA，发版即可在 HACS 里收到更新提示。

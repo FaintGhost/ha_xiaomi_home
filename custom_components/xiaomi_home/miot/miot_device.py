@@ -1536,10 +1536,17 @@ class MIoTEventEntity(Entity):
     def __on_device_state_changed(
         self, key: str, state: MIoTDeviceState
     ) -> None:
-        state_new = state == MIoTDeviceState.ONLINE
-        if state_new == self._attr_available:
+        # Never mark an event entity unavailable on device state changes
+        # (fork change). The state of an event entity is the timestamp of
+        # the last received event; a transient offline -> online flap
+        # during a gateway/cloud reconnect or an internal device re-sync
+        # only rewrites it to unavailable and back, which misfires state
+        # triggers in automations. The availability of the device itself
+        # stays visible on its other entities. An ONLINE transition is
+        # still applied so an entity that started unavailable recovers.
+        if state != MIoTDeviceState.ONLINE or self._attr_available:
             return
-        self._attr_available = state_new
+        self._attr_available = True
         self.async_write_ha_state()
 
 
