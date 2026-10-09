@@ -1012,7 +1012,7 @@ class MIoTServiceEntity(Entity):
         self._event_occurred_handler = None
         self._prop_changed_subs = {}
         self._pending_write_ha_state_timer = None
-        _LOGGER.info(
+        _LOGGER.debug(
             'new miot service entity, %s, %s, %s, %s',
             self.miot_device.name, self._attr_name, self.entity_data.spec.name,
             self.entity_id)
@@ -1320,7 +1320,7 @@ class MIoTPropertyEntity(Entity):
             f'{self.service.description_trans} {spec.description_trans}')
         self._attr_available = miot_device.online
 
-        _LOGGER.info(
+        _LOGGER.debug(
             'new miot property entity, %s, %s, %s, %s, %s',
             self.miot_device.name, self._attr_name, spec.platform,
             spec.device_class, self.entity_id)
@@ -1473,7 +1473,7 @@ class MIoTEventEntity(Entity):
         self._state_sub_id = 0
         self._value_sub_id = 0
 
-        _LOGGER.info(
+        _LOGGER.debug(
             'new miot event entity, %s, %s, %s, %s, %s',
             self.miot_device.name, self._attr_name, spec.platform,
             spec.device_class, self.entity_id)
