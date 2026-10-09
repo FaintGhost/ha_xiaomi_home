@@ -76,36 +76,29 @@ async def async_setup_entry(
 
 class DeviceTracker(MIoTServiceEntity, TrackerEntity):
     """Tracker entities for Xiaomi Home."""
-    _prop_battery_level: Optional[MIoTSpecProperty]
     _prop_latitude: Optional[MIoTSpecProperty]
     _prop_longitude: Optional[MIoTSpecProperty]
-    _prop_area_id: Optional[MIoTSpecProperty]
 
     def __init__(self, miot_device: MIoTDevice,
                  entity_data: MIoTEntityData) -> None:
         super().__init__(miot_device=miot_device, entity_data=entity_data)
-        self._prop_battery_level = None
         self._prop_latitude = None
         self._prop_longitude = None
-        self._prop_area_id = None
 
         # properties
         for prop in entity_data.props:
-            if prop.name == 'battery-level':
-                self._prop_battery_level = prop
-            elif prop.name == 'latitude':
+            if prop.name == 'latitude':
                 self._prop_latitude = prop
             elif prop.name == 'longitude':
                 self._prop_longitude = prop
-            elif prop.name == 'area-id':
-                self._prop_area_id = prop
 
-    @property
-    def battery_level(self) -> Optional[int]:
-        """The battery level of the device."""
-        return None if (self._prop_battery_level
-                        is None) else self.get_prop_value(
-                            prop=self._prop_battery_level)
+        # battery_level and location_name are no longer overridden
+        # (fork change): both properties (and even _attr_location_name)
+        # are deprecated in HA core and unsupported from HA 2027.7.
+        # The battery level is exposed as a dedicated battery sensor
+        # instead (the 'battery' service is no longer consumed by the
+        # device_tracker spec conversion), and the tracker state is
+        # derived from zones via latitude/longitude as core intends.
 
     @property
     def latitude(self) -> Optional[float]:
@@ -118,9 +111,3 @@ class DeviceTracker(MIoTServiceEntity, TrackerEntity):
         """The longitude coordinate of the device."""
         return None if self._prop_longitude is None else self.get_prop_value(
             prop=self._prop_longitude)
-
-    @property
-    def location_name(self) -> Optional[str]:
-        """The location name of the device."""
-        return None if self._prop_area_id is None else self.get_prop_value(
-            prop=self._prop_area_id)

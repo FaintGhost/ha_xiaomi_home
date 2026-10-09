@@ -437,15 +437,11 @@ SPEC_DEVICE_TRANS_MAP: dict = {
                 }
             }
         },
-        'optional': {
-            'battery': {
-                'required': {
-                    'properties': {
-                        'battery-level': {'read'}
-                    }
-                }
-            }
-        },
+        # The 'battery' service is intentionally not consumed here
+        # (fork change): the battery_level property of TrackerEntity is
+        # deprecated in HA core (unsupported from 2027.7), so the
+        # 'battery-level' property falls through to the generic property
+        # conversion and becomes a dedicated battery sensor instead.
         'entity': 'device_tracker'
     }
 }
