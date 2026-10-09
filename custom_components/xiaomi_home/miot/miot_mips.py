@@ -1212,7 +1212,7 @@ class MipsLocalClient(_MipsClient):
                 or 'piid' not in msg
                 or 'value' not in msg
             ):
-                self.log_info('unknown prop msg, %s', payload)
+                self.log_debug('unknown prop msg, %s', payload)
                 return
             if handler:
                 self.log_debug('local, on properties_changed, %s', payload)
@@ -1254,10 +1254,10 @@ class MipsLocalClient(_MipsClient):
                 or 'eiid' not in msg
                 # or 'arguments' not in msg
             ):
-                self.log_info('unknown event msg, %s', payload)
+                self.log_debug('unknown event msg, %s', payload)
                 return
             if 'arguments' not in msg:
-                self.log_info('wrong event msg, %s', payload)
+                self.log_debug('wrong event msg, %s', payload)
                 msg['arguments'] = []
             if handler:
                 self.log_debug('local, on event_occurred, %s', payload)
