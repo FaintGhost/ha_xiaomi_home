@@ -133,7 +133,7 @@ class FeatureTargetTemperature(MIoTServiceEntity, ClimateEntity):
                  entity_data: MIoTEntityData) -> None:
         """Initialize the feature class."""
         self._prop_target_temp = None
-        self._attr_temperature_unit = None
+        self._attr_native_temperature_unit = None
 
         super().__init__(miot_device=miot_device, entity_data=entity_data)
         # properties
@@ -147,14 +147,14 @@ class FeatureTargetTemperature(MIoTServiceEntity, ClimateEntity):
                 self._attr_min_temp = prop.value_range.min_
                 self._attr_max_temp = prop.value_range.max_
                 self._attr_target_temperature_step = prop.value_range.step
-                self._attr_temperature_unit = prop.external_unit
+                self._attr_native_temperature_unit = prop.external_unit
                 self._attr_supported_features |= (
                     ClimateEntityFeature.TARGET_TEMPERATURE)
                 self._prop_target_temp = prop
                 break
-        # temperature_unit is required by the climate entity
-        if not self._attr_temperature_unit:
-            self._attr_temperature_unit = UnitOfTemperature.CELSIUS
+        # native_temperature_unit is required by the climate entity
+        if not self._attr_native_temperature_unit:
+            self._attr_native_temperature_unit = UnitOfTemperature.CELSIUS
 
     async def async_set_temperature(self, **kwargs):
         """Set the target temperature."""
@@ -169,7 +169,7 @@ class FeatureTargetTemperature(MIoTServiceEntity, ClimateEntity):
                                           value=temp)
 
     @property
-    def target_temperature(self) -> Optional[float]:
+    def native_target_temperature(self) -> Optional[float]:
         """The current target temperature."""
         return (self.get_prop_value(
             prop=self._prop_target_temp) if self._prop_target_temp else None)
@@ -380,7 +380,7 @@ class FeatureTemperature(MIoTServiceEntity, ClimateEntity):
                 break
 
     @property
-    def current_temperature(self) -> Optional[float]:
+    def native_current_temperature(self) -> Optional[float]:
         """The current environment temperature."""
         return (self.get_prop_value(prop=self._prop_env_temperature)
                 if self._prop_env_temperature else None)
