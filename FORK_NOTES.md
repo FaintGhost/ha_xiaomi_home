@@ -83,13 +83,30 @@ from=时间戳→to=unavailable 的 state 触发器被误触发（灯被误 togg
   三条从 INFO 降为 DEBUG（同 54289bb 风格），一次重启少 200+ 条，
   消除 core 的 logging-too-frequently 警告。
 
-## 发版流程（HACS 自定义仓库）
+### 5. 电热毯 A/B 分区档位（基于 v0.5.0）
 
-本 fork 已作为 HACS 自定义仓库接入家里的 HA，发版即可在 HACS 里收到更新提示。
+- `number.py`：为 `custom.a-b-gears` 拆出 `A区档位` / `B区档位` 两个 number 实体。
+  写入时保留另一区当前档位，再按 `"A-B"` 格式回写，范围 1–6。
+- 仅影响电热毯（`xiaomi.blanket.mj3`），不改变原有全局档位/开关逻辑。
+
+### 6. HA 2026.11 温度 API 迁移（基于 v0.5.0）
+
+消除 HA 2026.11 的 `helpers.deprecation` 温度属性警告，2027.11 前兼容：
+
+- `climate.py`：`_attr_temperature_unit` → `_attr_native_temperature_unit`；
+  `FeatureTargetTemperature.target_temperature` → `native_target_temperature`；
+  `FeatureTemperature.current_temperature` → `native_current_temperature`。
+- `water_heater.py`：同样迁移 `_attr_temperature_unit`、`current_temperature`、
+  `target_temperature` 到 `native_*`。
+
+## 发版流程（Marketplace 自定义仓库）
+
+HA 2026.11 起 HACS 并入内置 **Marketplace**；已有 HACS 会自动迁移，自定义仓库和 update 实体保留。
+本 fork 已作为 Marketplace 自定义仓库接入家里的 HA，发版即可在 Marketplace 里收到更新提示。
 
 版本号规则：在上游版本号后加第四位递增（上游 v0.5.0 → 我们 v0.5.0.1、v0.5.0.2…；
 上游出 v0.5.1 并同步后，从 v0.5.1.1 开始）。不要用 `-custom.x` 后缀，
-语义化版本里那是预发布，排序比正式版低，HACS 不认。
+语义化版本里那是预发布，排序比正式版低，Marketplace 不认。
 
 ```bash
 git checkout custom-fixes
@@ -100,18 +117,18 @@ git add -A && git commit -m "chore: bump version to vX.Y.Z.N"
 # 3. 打 tag 并推送
 git tag -a vX.Y.Z.N -m "vX.Y.Z.N - <一句话说明>"
 git push origin custom-fixes vX.Y.Z.N
-# 4. 发 release（HACS 以 release 为准）
+# 4. 发 release（Marketplace 以 release 为准）
 gh release create vX.Y.Z.N --repo FaintGhost/ha_xiaomi_home --title "vX.Y.Z.N" --notes "<更新内容>"
 ```
 
-HA 侧更新：HACS → 找到 Xiaomi Home（FaintGhost fork）→ Update → 重启 HA。
+HA 侧更新：**设置 → Marketplace → 找到 Xiaomi Home（FaintGhost fork）→ Update → 重启 HA**。
 
-首次接入方式：HACS → 右上角 ⋯ → Custom repositories →
+首次接入方式：Marketplace → **Add from link** →
 URL `https://github.com/FaintGhost/ha_xiaomi_home`，类型 Integration → 添加。
-若之前装的是官方仓库版本，先在 HACS 里对官方条目 Remove（只删代码目录，
+若之前装的是官方仓库版本，先在 Marketplace 里对官方条目 Remove（只删代码目录，
 配置和实体都在 .storage 里不受影响），再从 fork 条目 Download，重启 HA。
 
-## 部署到 HA（无 HACS 的手动方式，备用）
+## 部署到 HA（无 Marketplace 的手动方式，备用）
 
 HA 是 HA OS，配置目录经 Samba 挂载（`//192.168.50.86/config`）。
 
