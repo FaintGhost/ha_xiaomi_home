@@ -46,7 +46,7 @@ off Xiaomi or its affiliates' products.
 Number entities for Xiaomi Home.
 """
 from __future__ import annotations
-from typing import Optional
+from typing import Any, Optional
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -132,7 +132,7 @@ class ElectricBlanketZoneNumber(MIoTPropertyEntity, NumberEntity):
         self.entity_id = f'{self.entity_id}_zone_{zone_name.lower()}'
         self._attr_name = f'{zone_name}区档位'
         self._attr_icon = 'mdi:radiator'
-        self._attr_native_min_value = 1
+        self._attr_native_min_value = 0
         self._attr_native_max_value = 6
         self._attr_native_step = 1
 
@@ -158,6 +158,9 @@ class ElectricBlanketZoneNumber(MIoTPropertyEntity, NumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         """Update this zone's gear while preserving the other zone."""
+        gear = int(value)
+        if not 0 <= gear <= 6:
+            raise ValueError(f'gear out of range: {value}')
         gears = self._get_gears(self._value)
         if gears is None:
             gears = self._get_gears(await self.get_property_async())
@@ -166,7 +169,7 @@ class ElectricBlanketZoneNumber(MIoTPropertyEntity, NumberEntity):
                 f'cannot parse a-b-gears, {self.entity_id}, {self.name}')
         a_gear, b_gear = gears
         if self._zone == 0:
-            a_gear = int(value)
+            a_gear = gear
         else:
-            b_gear = int(value)
+            b_gear = gear
         await self.set_property_async(value=f'{a_gear}-{b_gear}')
