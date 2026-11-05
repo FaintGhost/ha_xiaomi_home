@@ -71,6 +71,18 @@ async def async_setup_entry(
     for miot_device in device_list:
         for prop in miot_device.prop_list.get('number', []):
             new_entities.append(Number(miot_device=miot_device, spec=prop))
+        # Electric blankets expose A/B target gears as one "A-B" string
+        # property (custom.a-b-gears). Split it into two HA number entities.
+        for service in miot_device.spec_instance.services:
+            if service.name != 'custom':
+                continue
+            for prop in service.properties:
+                if prop.name != 'a-b-gears':
+                    continue
+                for zone in (0, 1):
+                    new_entities.append(
+                        ElectricBlanketZoneNumber(
+                            miot_device=miot_device, spec=prop, zone=zone))
 
     if new_entities:
         async_add_entities(new_entities)
@@ -104,3 +116,57 @@ class Number(MIoTPropertyEntity, NumberEntity):
     async def async_set_native_value(self, value: float) -> None:
         """Update the current value."""
         await self.set_property_async(value=value)
+
+
+class ElectricBlanketZoneNumber(MIoTPropertyEntity, NumberEntity):
+    """One A/B zone of an electric blanket's combined 'A-B' gear string."""
+
+    def __init__(
+        self, miot_device: MIoTDevice, spec: MIoTSpecProperty, zone: int
+    ) -> None:
+        """Initialize an A or B zone gear number."""
+        super().__init__(miot_device=miot_device, spec=spec)
+        self._zone = zone
+        zone_name = 'A' if zone == 0 else 'B'
+        self._attr_unique_id = f'{self._attr_unique_id}_zone_{zone_name}'
+        self.entity_id = f'{self.entity_id}_zone_{zone_name.lower()}'
+        self._attr_name = f'{zone_name}区档位'
+        self._attr_icon = 'mdi:radiator'
+        self._attr_native_min_value = 1
+        self._attr_native_max_value = 6
+        self._attr_native_step = 1
+
+    def _get_gears(self, raw: Any) -> Optional[tuple[int, int]]:
+        """Parse the blanket's 'A-B' gear string."""
+        if not isinstance(raw, str):
+            return None
+        parts = raw.split('-')
+        if len(parts) != 2:
+            return None
+        try:
+            return int(parts[0]), int(parts[1])
+        except ValueError:
+            return None
+
+    @property
+    def native_value(self) -> Optional[float]:
+        """Return this zone's current gear."""
+        gears = self._get_gears(self._value)
+        if gears is None:
+            return None
+        return gears[self._zone]
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Update this zone's gear while preserving the other zone."""
+        gears = self._get_gears(self._value)
+        if gears is None:
+            gears = self._get_gears(await self.get_property_async())
+        if gears is None:
+            raise RuntimeError(
+                f'cannot parse a-b-gears, {self.entity_id}, {self.name}')
+        a_gear, b_gear = gears
+        if self._zone == 0:
+            a_gear = int(value)
+        else:
+            b_gear = int(value)
+        await self.set_property_async(value=f'{a_gear}-{b_gear}')
