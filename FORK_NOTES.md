@@ -100,6 +100,13 @@ from=时间戳→to=unavailable 的 state 触发器被误触发（灯被误 togg
 - `water_heater.py`：同样迁移 `_attr_temperature_unit`、`current_temperature`、
   `target_temperature` 到 `native_*`。
 
+### 7. MIPS 断线自愈（基于 v0.5.0）
+
+- 连续 5 次 MIPS 连接失败后重建 paho MQTT Client，不再无限复用可能卡死的旧 client。
+- 连接成功时清零失败计数；失败日志记录 host、port、异常和 DNS 解析地址。
+- 解决网络短暂异常后必须重启 HA 才能恢复 Xiaomi Home 控制的问题。
+- 注意：如果运营商/中间网络持续封锁 `8883`，代码无法绕过，只能改网络出口。
+
 ## 发版流程（Marketplace 自定义仓库）
 
 HA 2026.11 起 HACS 并入内置 **Marketplace**；已有 HACS 会自动迁移，自定义仓库和 update 实体保留。
