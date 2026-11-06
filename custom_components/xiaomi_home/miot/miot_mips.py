@@ -50,6 +50,7 @@ import json
 import logging
 import random
 import re
+import socket
 import ssl
 import struct
 import threading
@@ -222,6 +223,7 @@ class _MipsClient(ABC):
     UINT32_MAX: int = 0xFFFFFFFF
     MIPS_RECONNECT_INTERVAL_MIN: float = 10
     MIPS_RECONNECT_INTERVAL_MAX: float = 600
+    MIPS_CONNECT_FAIL_RESET: int = 5
     MIPS_SUB_PATCH: int = 300
     MIPS_SUB_INTERVAL: float = 1
     main_loop: asyncio.AbstractEventLoop
@@ -290,6 +292,7 @@ class _MipsClient(ABC):
         self._mips_reconnect_tag = False
         self._mips_reconnect_interval = 0
         self._mips_reconnect_timer = None
+        self._mips_connect_fail_count = 0
         self._mips_state_sub_map = {}
         self._mips_state_sub_map_lock = threading.Lock()
         self._mips_sub_pending_map = {}
@@ -613,6 +616,14 @@ class _MipsClient(ABC):
 
     def __mips_loop_thread(self) -> None:
         self.log_info('mips_loop_thread start')
+        self.__init_mqtt_client()
+        # Connect to mips
+        self.__mips_start_connect_tries()
+        # Run event loop
+        self._internal_loop.run_forever()
+        self.log_info('mips_loop_thread exit!')
+
+    def __init_mqtt_client(self) -> None:
         # mqtt init for API_VERSION2,
         # callback_api_version=CallbackAPIVersion.VERSION2,
         self._mqtt = Client(client_id=self._client_id, protocol=MQTTv5)
@@ -639,11 +650,6 @@ class _MipsClient(ABC):
         self._mqtt.on_connect_fail = self.__on_connect_failed
         self._mqtt.on_disconnect = self.__on_disconnect
         self._mqtt.on_message = self.__on_message
-        # Connect to mips
-        self.__mips_start_connect_tries()
-        # Run event loop
-        self._internal_loop.run_forever()
-        self.log_info('mips_loop_thread exit!')
 
     def __on_connect(self, client, user_data, flags, rc, props) -> None:
         if not self._mqtt:
@@ -653,6 +659,7 @@ class _MipsClient(ABC):
             _LOGGER.error('__on_connect, but mqtt is disconnected')
             return
         self.log_info(f'mips connect, {flags}, {rc}, {props}')
+        self._mips_connect_fail_count = 0
         self.__reset_reconnect_time()
         self._mqtt_state = True
         self._internal_loop.call_soon(
@@ -672,6 +679,7 @@ class _MipsClient(ABC):
 
     def __on_connect_failed(self, client: Client, user_data: Any) -> None:
         self.log_error('mips connect failed')
+        self.__mark_connect_failure()
         # Try to reconnect
         self.__mips_try_reconnect()
 
@@ -777,16 +785,17 @@ class _MipsClient(ABC):
                 clean_start=True, keepalive=MIHOME_MQTT_KEEPALIVE)
             self.log_info(f'__mips_connect success, {result}')
         except (TimeoutError, OSError) as error:
-            self.log_error('__mips_connect, connect error, %s', error)
+            self.__log_connect_error(error)
 
         if result == MQTT_ERR_SUCCESS:
-            socket = self._mqtt.socket()
-            if socket is None:
+            mqtt_socket = self._mqtt.socket()
+            if mqtt_socket is None:
                 self.log_error(
                     '__mips_connect, connect success, but socket is None')
+                self.__mark_connect_failure()
                 self.__mips_try_reconnect()
                 return
-            self._mqtt_fd = socket.fileno()
+            self._mqtt_fd = mqtt_socket.fileno()
             self.log_debug(f'__mips_connect, _mqtt_fd, {self._mqtt_fd}')
             self._internal_loop.add_reader(
                 self._mqtt_fd, self.__mqtt_read_handler)
@@ -797,7 +806,43 @@ class _MipsClient(ABC):
                 self.MQTT_INTERVAL_S, self.__mqtt_timer_handler)
         else:
             self.log_error(f'__mips_connect error result, {result}')
+            self.__mark_connect_failure()
             self.__mips_try_reconnect()
+
+    def __log_connect_error(self, error: Exception) -> None:
+        self.log_error(
+            '__mips_connect, connect error, %s:%s, %s',
+            self._host, self._port, error)
+        try:
+            infos = socket.getaddrinfo(
+                self._host, self._port, type=socket.SOCK_STREAM)
+            addrs = sorted({info[4][0] for info in infos})
+            self.log_error('__mips_connect, resolved addresses, %s', addrs)
+        except OSError as err:
+            self.log_error('__mips_connect, resolve error, %s', err)
+
+    def __mark_connect_failure(self) -> None:
+        self._mips_connect_fail_count += 1
+        if self._mips_connect_fail_count < self.MIPS_CONNECT_FAIL_RESET:
+            return
+        self.log_error(
+            'mips connect failed %s times, rebuilding mqtt client',
+            self._mips_connect_fail_count)
+        self._mips_connect_fail_count = 0
+        self.__reset_mqtt_client()
+
+    def __reset_mqtt_client(self) -> None:
+        old_mqtt = self._mqtt
+        self._mqtt = None
+        if old_mqtt:
+            try:
+                old_mqtt.disconnect()
+            except Exception as err:  # pylint: disable=broad-exception-caught
+                self.log_debug('mips old mqtt disconnect error, %s', err)
+        try:
+            self.__init_mqtt_client()
+        except Exception as err:  # pylint: disable=broad-exception-caught
+            self.log_error('mips mqtt client rebuild error, %s', err)
 
     def __mips_try_reconnect(self, immediately: bool = False) -> None:
         if self._mips_reconnect_timer:
