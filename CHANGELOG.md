@@ -1,4 +1,14 @@
 # CHANGELOG
+
+## v0.5.8 - 2026-11-09
+### Fixed
+- Stop turning off unrelated Xiaomi switches from clearing electric blanket A/B zones. Each switch now writes only its own power property.
+- Serialize A/B gear writes, read the device's current combined value before changing a zone, and update both zone caches after a successful write.
+- Refresh both zone displays when the device does not push gear changes, while preserving display-only zero values when blanket power is off.
+
+### Tests
+- Add a standalone regression check for cross-device switch isolation, concurrent zone writes, stale caches, and power/display transitions.
+
 ## v0.5.0
 ### Added
 - Add co2-density property mapping to SPEC_PROP_TRANS_MAP to enable statistics recording for CO2 sensors. [#1631](https://github.com/XiaoMi/ha_xiaomi_home/pull/1631)
