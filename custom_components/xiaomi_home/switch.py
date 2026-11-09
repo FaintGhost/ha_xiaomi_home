@@ -101,17 +101,23 @@ class Switch(MIoTPropertyEntity, SwitchEntity):
         if self.is_on:
             # Electric blankets keep their A/B gears in a custom string.
             # Zeroing after power-off wakes the blanket, so zero before it.
-            for prop in self.miot_device.prop_list.get('custom', []):
-                if prop.name != 'a-b-gears':
+            for service in self.miot_device.spec_instance.services:
+                if service.name != 'custom':
                     continue
-                try:
-                    await self.miot_device.miot_client.set_prop_async(
-                        did=self.miot_device.did,
-                        siid=prop.service.iid,
-                        piid=prop.iid,
-                        value=prop.value_format('0-0'))
-                except Exception:  # pylint: disable=broad-exception-caught
-                    pass
+                for prop in service.properties:
+                    if prop.name != 'a-b-gears':
+                        continue
+                    try:
+                        await self.miot_device.miot_client.set_prop_async(
+                            did=self.miot_device.did,
+                            siid=prop.service.iid,
+                            piid=prop.iid,
+                            value=prop.value_format('0-0'))
+                    except Exception:  # pylint: disable=broad-exception-caught
+                        pass
+                    break
+                else:
+                    continue
                 break
         await self.set_property_async(value=False)
 
