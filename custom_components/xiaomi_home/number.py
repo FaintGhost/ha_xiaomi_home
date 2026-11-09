@@ -139,21 +139,30 @@ class ElectricBlanketZoneNumber(MIoTPropertyEntity, NumberEntity):
         self._attr_native_max_value = 6
         self._attr_native_step = 1
         self._power_prop: Optional[MIoTSpecProperty] = None
-        for service in miot_device.spec_instance.services:
-            if service.name != 'heater':
-                continue
-            for prop in service.properties:
-                if prop.name == 'on':
-                    self._power_prop = prop
-                    break
-            if self._power_prop:
+        for prop in miot_device.prop_list.get('switch', []):
+            if prop.name == 'on':
+                self._power_prop = prop
                 break
+        if not self._power_prop:
+            for service in miot_device.spec_instance.services:
+                for prop in service.properties:
+                    if prop.name == 'on':
+                        self._power_prop = prop
+                        break
+                if self._power_prop:
+                    break
         self._power_on: Optional[bool] = None
         self._power_sub_id = 0
         _LOGGER.warning(
             'blanket zone init, %s, power prop: %s',
             self.entity_id,
             self._power_prop.name if self._power_prop else None)
+        if not self._power_prop:
+            _LOGGER.warning(
+                'blanket zone services, %s',
+                [(service.name, service.iid,
+                  [prop.name for prop in service.properties])
+                 for service in miot_device.spec_instance.services])
 
     async def async_added_to_hass(self) -> None:
         """Subscribe to the blanket power state and load its current value."""
