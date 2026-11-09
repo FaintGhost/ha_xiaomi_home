@@ -46,6 +46,7 @@ off Xiaomi or its affiliates' products.
 Number entities for Xiaomi Home.
 """
 from __future__ import annotations
+import asyncio
 from typing import Any, Optional
 
 from homeassistant.config_entries import ConfigEntry
@@ -79,10 +80,12 @@ async def async_setup_entry(
             for prop in service.properties:
                 if prop.name != 'a-b-gears':
                     continue
+                zone_entities = []
                 for zone in (0, 1):
                     new_entities.append(
                         ElectricBlanketZoneNumber(
-                            miot_device=miot_device, spec=prop, zone=zone))
+                            miot_device=miot_device, spec=prop, zone=zone,
+                            zone_entities=zone_entities))
 
     if new_entities:
         async_add_entities(new_entities)
@@ -122,11 +125,19 @@ class ElectricBlanketZoneNumber(MIoTPropertyEntity, NumberEntity):
     """One A/B zone of an electric blanket's combined 'A-B' gear string."""
 
     def __init__(
-        self, miot_device: MIoTDevice, spec: MIoTSpecProperty, zone: int
+        self, miot_device: MIoTDevice, spec: MIoTSpecProperty, zone: int,
+        zone_entities: list[ElectricBlanketZoneNumber],
     ) -> None:
         """Initialize an A or B zone gear number."""
         super().__init__(miot_device=miot_device, spec=spec)
         self._zone = zone
+        self._zone_entities = zone_entities
+        self._zone_lock = (
+            zone_entities[0]._zone_lock if zone_entities else asyncio.Lock())
+        zone_entities.append(self)
+        # The combined string does not reliably notify after writes or
+        # changes to the blanket's overall gear. Poll once for both zones.
+        self._attr_should_poll = zone == 0
         zone_name = 'A' if zone == 0 else 'B'
         self._attr_unique_id = f'{self._attr_unique_id}_zone_{zone_name}'
         self.entity_id = f'{self.entity_id}_zone_{zone_name.lower()}'
@@ -199,6 +210,25 @@ class ElectricBlanketZoneNumber(MIoTPropertyEntity, NumberEntity):
         except ValueError:
             return None
 
+    async def async_update(self) -> None:
+        """Refresh both zones without sending any heating command."""
+        async with self._zone_lock:
+            raw = await self.get_property_async()
+            if self._get_gears(raw) is None:
+                return
+            power = None
+            if self._power_prop:
+                power = await self.miot_device.miot_client.get_prop_async(
+                    did=self.miot_device.did,
+                    siid=self._power_prop.service.iid,
+                    piid=self._power_prop.iid)
+            for entity in self._zone_entities:
+                entity._value = raw
+                if power is not None:
+                    entity._power_on = bool(
+                        self._power_prop.value_format(power))
+                entity.async_write_ha_state()
+
     @property
     def native_value(self) -> Optional[float]:
         """Return this zone's current gear, or 0 when the blanket is off."""
@@ -214,15 +244,21 @@ class ElectricBlanketZoneNumber(MIoTPropertyEntity, NumberEntity):
         gear = int(value)
         if not 0 <= gear <= 6:
             raise ValueError(f'gear out of range: {value}')
-        gears = self._get_gears(self._value)
-        if gears is None:
+        async with self._zone_lock:
+            # Read the combined device value, never a slider's old snapshot.
             gears = self._get_gears(await self.get_property_async())
-        if gears is None:
-            raise RuntimeError(
-                f'cannot parse a-b-gears, {self.entity_id}, {self.name}')
-        a_gear, b_gear = gears
-        if self._zone == 0:
-            a_gear = gear
-        else:
-            b_gear = gear
-        await self.set_property_async(value=f'{a_gear}-{b_gear}')
+            if gears is None:
+                raise RuntimeError(
+                    f'cannot parse a-b-gears, {self.entity_id}, {self.name}')
+            a_gear, b_gear = gears
+            if self._zone == 0:
+                a_gear = gear
+            else:
+                b_gear = gear
+            raw = f'{a_gear}-{b_gear}'
+            await self.set_property_async(value=raw)
+            # A successful write changes the whole property. Update the
+            # sibling before another zone's read-modify-write can begin.
+            for entity in self._zone_entities:
+                entity._value = raw
+                entity.async_write_ha_state()

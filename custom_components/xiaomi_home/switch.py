@@ -46,7 +46,6 @@ off Xiaomi or its affiliates' products.
 Switch entities for Xiaomi Home.
 """
 from __future__ import annotations
-import asyncio
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -99,25 +98,6 @@ class Switch(MIoTPropertyEntity, SwitchEntity):
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the switch off."""
-        if self.is_on:
-            # Electric blankets keep their A/B gears in a custom string.
-            # Zeroing after power-off wakes the blanket, so zero before it.
-            # Use the number entities so their cached values are updated too.
-            zone_ids = [
-                entity_id for entity_id in self.hass.states.async_entity_ids(
-                    'number') if '_a_b_gears_' in entity_id]
-            for entity_id in zone_ids:
-                try:
-                    await self.hass.services.async_call(
-                        'number', 'set_value',
-                        {'entity_id': entity_id, 'value': 0},
-                        blocking=True)
-                except Exception:  # pylint: disable=broad-exception-caught
-                    pass
-            if zone_ids:
-                # The blanket restores its previous gears if power-off follows
-                # too quickly, so allow the zero write to settle first.
-                await asyncio.sleep(5)
         await self.set_property_async(value=False)
 
     async def async_toggle(self, **kwargs: Any) -> None:

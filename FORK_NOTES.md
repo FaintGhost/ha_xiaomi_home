@@ -113,13 +113,21 @@ from=时间戳→to=unavailable 的 state 触发器被误触发（灯被误 togg
 - 总控关闭时两个滑条显示 0，不再残留上次的 3 档。
 - 不向设备写入 `a-b-gears`：实测关闭状态写入会重新开启电热毯，因此只做状态显示同步。
 
+### 9. 电热毯跨设备清零与陈旧缓存修复（v0.5.8）
+
+- 删除 `Switch.async_turn_off` 中遍历所有 A/B number 并写零的逻辑；关闭其他小米设备不再触碰电热毯分区，也不再等待 5 秒。
+- A/B 共用写锁，每次写入先读取设备实际的完整档位，保留另一分区后写回；成功后同步两区缓存。
+- 一个分区负责原生轮询并刷新两区，覆盖设备不推送档位变化的情况。总控关闭仅令滑条显示 0，不清空硬件分区。
+- 回归：`uv run --no-project python test/check_blanket_zones.py`，不安装 HA、不连接真实设备。
+- 同一补丁已在家中 HA 持久化并热应用；实际只读轮询已观察到读取 `6-6` 并更新两区。没有调档、切换电热毯总控或重启 HA。
+
 ## 发版流程（Marketplace 自定义仓库）
 
 HA 2026.11 起 HACS 并入内置 **Marketplace**；已有 HACS 会自动迁移，自定义仓库和 update 实体保留。
 本 fork 已作为 Marketplace 自定义仓库接入家里的 HA，发版即可在 Marketplace 里收到更新提示。
 
-版本号规则：在上游版本号后加第四位递增（上游 v0.5.0 → 我们 v0.5.0.1、v0.5.0.2…；
-上游出 v0.5.1 并同步后，从 v0.5.1.1 开始）。不要用 `-custom.x` 后缀，
+当前维护分支沿用已发布的 `v0.5.x` 版本递增（如 `v0.5.7` → `v0.5.8`）。
+发版时保持 manifest、Git tag 和 GitHub Release 的版本一致。不要用 `-custom.x` 后缀，
 语义化版本里那是预发布，排序比正式版低，Marketplace 不认。
 
 ```bash
@@ -127,12 +135,12 @@ git checkout custom-fixes
 # 1. 改代码、提交修复
 # 2.  bump manifest 版本号
 #    编辑 custom_components/xiaomi_home/manifest.json 的 "version" 字段
-git add -A && git commit -m "chore: bump version to vX.Y.Z.N"
+git add <本次改动文件> && git commit -m "chore: release vX.Y.Z"
 # 3. 打 tag 并推送
-git tag -a vX.Y.Z.N -m "vX.Y.Z.N - <一句话说明>"
-git push origin custom-fixes vX.Y.Z.N
+git tag -a vX.Y.Z -F <发布说明临时文件>
+git push origin custom-fixes vX.Y.Z
 # 4. 发 release（Marketplace 以 release 为准）
-gh release create vX.Y.Z.N --repo FaintGhost/ha_xiaomi_home --title "vX.Y.Z.N" --notes "<更新内容>"
+gh release create vX.Y.Z --repo FaintGhost/ha_xiaomi_home --title "vX.Y.Z" --notes-file <发布说明临时文件> --verify-tag
 ```
 
 HA 侧更新：**设置 → Marketplace → 找到 Xiaomi Home（FaintGhost fork）→ Update → 重启 HA**。
