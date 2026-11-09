@@ -46,6 +46,7 @@ off Xiaomi or its affiliates' products.
 Switch entities for Xiaomi Home.
 """
 from __future__ import annotations
+import logging
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -57,6 +58,8 @@ from .miot.miot_device import MIoTDevice
 from .miot.miot_spec import MIoTSpecProperty
 from .miot.miot_device import MIoTPropertyEntity
 from .miot.const import DOMAIN
+
+_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
@@ -98,27 +101,34 @@ class Switch(MIoTPropertyEntity, SwitchEntity):
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the switch off."""
+        _LOGGER.warning('blanket off hook, %s, on=%s', self.entity_id, self.is_on)
         if self.is_on:
             # Electric blankets keep their A/B gears in a custom string.
             # Zeroing after power-off wakes the blanket, so zero before it.
+            found = False
             for service in self.miot_device.spec_instance.services:
                 if service.name != 'custom':
                     continue
+                _LOGGER.warning('blanket custom service, %s, %s', service.iid, [p.name for p in service.properties])
                 for prop in service.properties:
                     if prop.name != 'a-b-gears':
                         continue
+                    found = True
+                    _LOGGER.warning('blanket zero prop, %s, value=%s', prop.name, prop.value_format('0-0'))
                     try:
                         await self.miot_device.miot_client.set_prop_async(
                             did=self.miot_device.did,
                             siid=prop.service.iid,
                             piid=prop.iid,
                             value=prop.value_format('0-0'))
-                    except Exception:  # pylint: disable=broad-exception-caught
-                        pass
+                    except Exception as e:  # pylint: disable=broad-exception-caught
+                        _LOGGER.warning('blanket zero failed, %s', e)
                     break
                 else:
                     continue
                 break
+            if not found:
+                _LOGGER.warning('blanket no a-b-gears, %s', self.entity_id)
         await self.set_property_async(value=False)
 
     async def async_toggle(self, **kwargs: Any) -> None:
