@@ -135,6 +135,54 @@ class ElectricBlanketZoneNumber(MIoTPropertyEntity, NumberEntity):
         self._attr_native_min_value = 0
         self._attr_native_max_value = 6
         self._attr_native_step = 1
+        self._power_prop: Optional[MIoTSpecProperty] = None
+        for service in miot_device.spec_instance.services:
+            if service.name != 'heater':
+                continue
+            for prop in service.properties:
+                if prop.name == 'on':
+                    self._power_prop = prop
+                    break
+            if self._power_prop:
+                break
+        self._power_on: Optional[bool] = None
+        self._power_sub_id = 0
+
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to the blanket power state and load its current value."""
+        await super().async_added_to_hass()
+        if not self._power_prop:
+            return
+        self._power_sub_id = self.miot_device.sub_property(
+            handler=self.__on_power_changed,
+            siid=self._power_prop.service.iid,
+            piid=self._power_prop.iid)
+        try:
+            value = await self.miot_device.miot_client.get_prop_async(
+                did=self.miot_device.did,
+                siid=self._power_prop.service.iid,
+                piid=self._power_prop.iid)
+        except Exception:  # pylint: disable=broad-exception-caught
+            value = None
+        if value is not None:
+            self._power_on = bool(self._power_prop.value_format(value))
+            self.async_write_ha_state()
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Unsubscribe from the blanket power state."""
+        if self._power_prop and self._power_sub_id:
+            self.miot_device.unsub_property(
+                siid=self._power_prop.service.iid,
+                piid=self._power_prop.iid,
+                sub_id=self._power_sub_id)
+            self._power_sub_id = 0
+        await super().async_will_remove_from_hass()
+
+    def __on_power_changed(self, params: dict, ctx: Any) -> None:
+        if not self._power_prop:
+            return
+        self._power_on = bool(self._power_prop.value_format(params.get('value')))
+        self.async_write_ha_state()
 
     def _get_gears(self, raw: Any) -> Optional[tuple[int, int]]:
         """Parse the blanket's 'A-B' gear string."""
@@ -150,7 +198,9 @@ class ElectricBlanketZoneNumber(MIoTPropertyEntity, NumberEntity):
 
     @property
     def native_value(self) -> Optional[float]:
-        """Return this zone's current gear."""
+        """Return this zone's current gear, or 0 when the blanket is off."""
+        if self._power_on is False:
+            return 0
         gears = self._get_gears(self._value)
         if gears is None:
             return None
