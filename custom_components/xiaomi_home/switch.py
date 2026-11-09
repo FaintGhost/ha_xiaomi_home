@@ -46,6 +46,7 @@ off Xiaomi or its affiliates' products.
 Switch entities for Xiaomi Home.
 """
 from __future__ import annotations
+import asyncio
 import logging
 from typing import Any
 
@@ -121,6 +122,12 @@ class Switch(MIoTPropertyEntity, SwitchEntity):
                             siid=prop.service.iid,
                             piid=prop.iid,
                             value=prop.value_format('0-0'))
+                        await asyncio.sleep(1)
+                        raw = await self.miot_device.miot_client.get_prop_async(
+                            did=self.miot_device.did,
+                            siid=prop.service.iid,
+                            piid=prop.iid)
+                        _LOGGER.warning('blanket zero readback, %r', raw)
                     except Exception as e:  # pylint: disable=broad-exception-caught
                         _LOGGER.warning('blanket zero failed, %s', e)
                     break
