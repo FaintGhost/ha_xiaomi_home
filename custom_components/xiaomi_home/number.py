@@ -46,6 +46,7 @@ off Xiaomi or its affiliates' products.
 Number entities for Xiaomi Home.
 """
 from __future__ import annotations
+import logging
 from typing import Any, Optional
 
 from homeassistant.config_entries import ConfigEntry
@@ -56,6 +57,8 @@ from homeassistant.components.number import NumberEntity
 from .miot.const import DOMAIN
 from .miot.miot_spec import MIoTSpecProperty
 from .miot.miot_device import MIoTDevice, MIoTPropertyEntity
+
+_LOGGER = logging.getLogger(__name__)
 
 
 async def async_setup_entry(
@@ -147,6 +150,10 @@ class ElectricBlanketZoneNumber(MIoTPropertyEntity, NumberEntity):
                 break
         self._power_on: Optional[bool] = None
         self._power_sub_id = 0
+        _LOGGER.warning(
+            'blanket zone init, %s, power prop: %s',
+            self.entity_id,
+            self._power_prop.name if self._power_prop else None)
 
     async def async_added_to_hass(self) -> None:
         """Subscribe to the blanket power state and load its current value."""
@@ -166,6 +173,9 @@ class ElectricBlanketZoneNumber(MIoTPropertyEntity, NumberEntity):
             value = None
         if value is not None:
             self._power_on = bool(self._power_prop.value_format(value))
+            _LOGGER.warning(
+                'blanket zone power initial, %s, raw=%r, on=%r',
+                self.entity_id, value, self._power_on)
             self.async_write_ha_state()
 
     async def async_will_remove_from_hass(self) -> None:
@@ -182,6 +192,9 @@ class ElectricBlanketZoneNumber(MIoTPropertyEntity, NumberEntity):
         if not self._power_prop:
             return
         self._power_on = bool(self._power_prop.value_format(params.get('value')))
+        _LOGGER.warning(
+            'blanket zone power changed, %s, raw=%r, on=%r',
+            self.entity_id, params.get('value'), self._power_on)
         self.async_write_ha_state()
 
     def _get_gears(self, raw: Any) -> Optional[tuple[int, int]]:
