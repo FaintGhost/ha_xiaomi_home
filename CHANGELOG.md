@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## v0.5.9 - 2026-11-19
+### Added
+- Add `miot/specs/spec_standard.yaml` and the `_SpecStandard` rule set: services and properties of a device that use a vendor-owned spec URN (for example `urn:cuco-spec:service:switch:...` instead of `urn:miot-spec-v2:...`) can be declared standard per device URN, so they are no longer dropped when "hide non-standard entities" is enabled.
+- Declare `cuco.plug.cp2ad` (multi-outlet plug) services `3` and `4` as standard; the second and third outlets now get switch entities.
+
+### Notes
+- The parsed MIoT spec is cached under `.storage/xiaomi_home/miot_specs/`; after editing `spec_standard.yaml`, delete the matching cache file and restart Home Assistant so the spec is parsed again.
+
 ## v0.5.8 - 2026-11-09
 ### Fixed
 - Stop turning off unrelated Xiaomi switches from clearing electric blanket A/B zones. Each switch now writes only its own power property.

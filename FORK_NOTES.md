@@ -25,6 +25,36 @@
 - `miot/miot_device.py`
   - 设备已在线时再收到状态变化事件，仍然刷新属性（覆盖状态推送丢失的场景）。
 
+### 2. 私有 URN 设备扩展（v0.5.9）
+
+背景：部分设备（多路插座、私有功能开关等）的附加能力使用**厂商私有 spec URN**，
+比如 `urn:cuco-spec:service:switch:...` 而不是 `urn:miot-spec-v2:service:switch:...`。
+`miot/miot_spec.py` 会把这类服务/属性标记成 `proprietary`，一旦开启
+「隐藏非标准实体」（`hide_non_standard_entities: true`，默认值），这些实体
+就完全不创建，导致附加插孔在 HA 里不可用。
+
+改动：
+
+- `miot/specs/spec_standard.yaml`（新增）：按**设备 URN** 列出需要强制视为标准的
+  `services` / `properties` / `events` / `actions`。格式与 `spec_filter.yaml` 相同，
+  语义相反。
+- `miot/miot_spec.py`：新增 `_SpecStandard` 类（仿 `_SpecFilter`），并在
+  `__parse` 计算 `proprietary` 时增加豁免判断。
+
+新增一台设备支持的做法：
+
+1. 在 `.storage/xiaomi_home/miot_specs/` 里找到该设备的 spec 缓存
+   （`urn:miot-spec-v2:device:...:<model>:<ver>_<lang>.dict`），查看目标服务的
+   `type` 是否为私有 URN；
+2. 在 `spec_standard.yaml` 里以 **URN 前 6 段**为 key（不含末尾版本号）添加条目，
+   siid/piid 用**字符串**写法：`"3"`、`"3.1"`、`"3.*"`；
+3. **删除对应的 spec 缓存文件**并重启 Home Assistant（解析结果有缓存，
+   只 reload 集成不会重新解析）；
+4. 验证：目标实体出现且可用。
+
+注意：`hide_non_standard_entities` 保持 `true` 即可，不需要为了一台设备全局放开
+（全局放开会让所有设备的非标准实体一起冒出来）。
+
 ## 同步上游的流程
 
 ```bash
