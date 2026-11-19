@@ -1104,6 +1104,84 @@ class _SpecFilter:
         return False
 
 
+class _SpecStandard:
+    """Force vendor-private services/properties to be treated as standard.
+
+    Some devices expose extra ports / capabilities with a vendor-owned URN
+    (e.g. ``urn:cuco-spec:service:switch:...``) instead of
+    ``urn:miot-spec-v2:...``. Those entries are flagged ``proprietary`` and
+    dropped when ``hide_non_standard_entities`` is enabled, so the extra
+    ports become unreachable from Home Assistant.
+
+    ``specs/spec_standard.yaml`` lists, per device URN, the services and
+    properties that must be kept anyway. The format matches
+    ``spec_filter.yaml`` but with the opposite meaning:
+
+    .. code-block:: yaml
+
+        urn:miot-spec-v2:device:outlet:0000A002:cuco-cp2ad:
+          services:
+          - "3"
+          - "4"
+          properties:
+          - "3.1"
+
+    The key is the first six segments of the URN (without the version).
+    """
+    _SPEC_STANDARD_FILE = 'specs/spec_standard.yaml'
+    _main_loop: asyncio.AbstractEventLoop
+    _data: Optional[dict[str, dict[str, set]]]
+    _cache: Optional[dict]
+
+    def __init__(self, loop: Optional[asyncio.AbstractEventLoop]) -> None:
+        self._main_loop = loop or asyncio.get_event_loop()
+        self._data = None
+        self._cache = None
+
+    async def init_async(self) -> None:
+        if isinstance(self._data, dict):
+            return
+        self._data = {}
+        try:
+            std_data = await self._main_loop.run_in_executor(
+                None, load_yaml_file,
+                os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             self._SPEC_STANDARD_FILE))
+        except Exception as err:  # pylint: disable=broad-exception-caught
+            _LOGGER.error('spec standard, load file error, %s', err)
+            return
+        if not isinstance(std_data, dict):
+            _LOGGER.error('spec standard, invalid content')
+            return
+        self._data = std_data
+
+    async def deinit_async(self) -> None:
+        self._cache = None
+        self._data = None
+
+    async def set_spec_spec(self, urn_key: str) -> None:
+        """MUST call init_async() first."""
+        if not self._data:
+            return
+        self._cache = self._data.get(urn_key, None)
+
+    def is_service_standard(self, siid: int) -> bool:
+        """MUST call init_async() and set_spec_spec() first."""
+        if (self._cache and 'services' in self._cache and
+                (str(siid) in self._cache['services'] or
+                 '*' in self._cache['services'])):
+            return True
+        return False
+
+    def is_property_standard(self, siid: int, piid: int) -> bool:
+        """MUST call init_async() and set_spec_spec() first."""
+        if (self._cache and 'properties' in self._cache and
+                (f'{siid}.{piid}' in self._cache['properties'] or
+                 f'{siid}.*' in self._cache['properties'])):
+            return True
+        return False
+
+
 class _SpecAdd:
     """MIoT-Spec-V2 add for entity conversion."""
     _SPEC_ADD_FILE = 'specs/spec_add.json'
@@ -1261,6 +1339,7 @@ class MIoTSpecParser:
     _multi_lang: _MIoTSpecMultiLang
     _bool_trans: _SpecBoolTranslation
     _spec_filter: _SpecFilter
+    _spec_standard: _SpecStandard
     _spec_add: _SpecAdd
     _spec_modify: _SpecModify
 
@@ -1280,6 +1359,7 @@ class MIoTSpecParser:
         self._bool_trans = _SpecBoolTranslation(lang=self._lang,
                                                 loop=self._main_loop)
         self._spec_filter = _SpecFilter(loop=self._main_loop)
+        self._spec_standard = _SpecStandard(loop=self._main_loop)
         self._spec_add = _SpecAdd(loop=self._main_loop)
         self._spec_modify = _SpecModify(loop=self._main_loop)
 
@@ -1290,6 +1370,7 @@ class MIoTSpecParser:
             return
         await self._bool_trans.init_async()
         await self._spec_filter.init_async()
+        await self._spec_standard.init_async()
         await self._spec_add.init_async()
         await self._spec_modify.init_async()
         std_lib_cache = await self._storage.load_async(domain=self._DOMAIN,
@@ -1329,6 +1410,7 @@ class MIoTSpecParser:
         # self._std_lib.deinit()
         await self._bool_trans.deinit_async()
         await self._spec_filter.deinit_async()
+        await self._spec_standard.deinit_async()
         await self._spec_add.deinit_async()
         await self._spec_modify.deinit_async()
 
@@ -1410,6 +1492,7 @@ class MIoTSpecParser:
         await self._multi_lang.set_spec_async(urn=urn)
         # Set spec filter
         await self._spec_filter.set_spec_spec(urn_key=urn_key)
+        await self._spec_standard.set_spec_spec(urn_key=urn_key)
         # Set spec add
         await self._spec_add.set_spec_async(urn=urn)
         # Set spec modify
@@ -1456,7 +1539,9 @@ class MIoTSpecParser:
                     'need_filter' not in service) else service['need_filter']
             if spec_service.need_filter:
                 continue
-            if type_strs[1] != 'miot-spec-v2':
+            std_service: bool = self._spec_standard.is_service_standard(
+                siid=service['iid'])
+            if type_strs[1] != 'miot-spec-v2' and not std_service:
                 spec_service.proprietary = True
             spec_service.description_trans = (
                 self._multi_lang.translate(f's:{service["iid"]}') or
@@ -1487,7 +1572,10 @@ class MIoTSpecParser:
                      property_['need_filter']))
                 if spec_prop.need_filter:
                     continue
-                if p_type_strs[1] != 'miot-spec-v2':
+                if (p_type_strs[1] != 'miot-spec-v2' and
+                        not std_service and
+                        not self._spec_standard.is_property_standard(
+                            siid=service['iid'], piid=property_['iid'])):
                     spec_prop.proprietary = spec_service.proprietary or True
                 spec_prop.description_trans = (
                     self._multi_lang.translate(

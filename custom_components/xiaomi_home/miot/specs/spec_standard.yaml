@@ -1,0 +1,14 @@
+# Vendor-private (non miot-spec-v2) services/properties listed here are
+# treated as standard entities, so they are kept even when
+# "hide_non_standard_entities" is enabled.
+#
+# Format is the same as spec_filter.yaml, but with the opposite meaning.
+# The key is the first six URN segments (without the trailing version),
+# siid/piid must be quoted strings, e.g. "3", "3.1", "3.*".
+
+# cuco.plug.cp2ad 多路插座：siid 3/4 是 urn:cuco-spec: 私有服务，
+# 加上后两个附加插孔才会以 switch 实体出现。
+urn:miot-spec-v2:device:outlet:0000A002:cuco-cp2ad:
+  services:
+  - "3"
+  - "4"
