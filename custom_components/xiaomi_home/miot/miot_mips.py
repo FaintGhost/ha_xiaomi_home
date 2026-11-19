@@ -655,8 +655,19 @@ class _MipsClient(ABC):
         if not self._mqtt:
             _LOGGER.error('__on_connect, but mqtt is None')
             return
+        if client is not self._mqtt:
+            # Callback of a client which has been rebuilt in the meantime
+            self.log_debug('__on_connect, ignore callback of old mqtt client')
+            return
         if not self._mqtt.is_connected():
-            _LOGGER.error('__on_connect, but mqtt is disconnected')
+            # The connection was closed again before this callback was
+            # dispatched, so the session never became usable. This is a normal
+            # reconnect race, not an error: paho calls on_disconnect right
+            # after this callback and schedules the next attempt there. Reset
+            # the back off so that the retry uses the minimal interval.
+            self.log_info(
+                f'__on_connect, connection closed during connect, {rc}')
+            self._mips_reconnect_interval = 0
             return
         self.log_info(f'mips connect, {flags}, {rc}, {props}')
         self._mips_connect_fail_count = 0

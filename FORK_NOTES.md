@@ -3,6 +3,27 @@
 本仓库是 [XiaoMi/ha_xiaomi_home](https://github.com/XiaoMi/ha_xiaomi_home) 的个人维护分支，
 用于在家用 HA（core-2026.9.4）上修复自己遇到的问题，同时定期同步上游。
 
+### 3. 云 MIPS 重连竞态（v0.5.10）
+
+现象：系统日志偶发一条 ERROR：
+
+```
+ERROR custom_components.xiaomi_home.miot.miot_mips: __on_connect, but mqtt is disconnected
+ERROR custom_components.xiaomi_home.miot.miot_client: mips try reconnect after 20s
+```
+
+原因：云 MQTT 断开（`rc=7` = `MQTT_ERR_CONN_LOST`）后重连，CONNACK 到达时连接又被对端关掉，
+`__on_connect` 里的 `is_connected()` 为 False。原实现把它当错误，直接 `return`，
+既不重置退避也不记账，于是白白多等一个翻倍的退避周期。
+
+改动（`miot/miot_mips.py` 的 `__on_connect`）：
+
+- 该分支降为 `info`：`__on_connect, connection closed during connect, {rc}`；
+- 重置 `_mips_reconnect_interval`，重连按最小间隔（10s）而不是翻倍退避；
+- 增加 `client is not self._mqtt` 判断，忽略已被重建的旧客户端回调。
+
+上层逻辑不变：真正的重连仍由 `on_disconnect` 调度，发布/订阅仍各自检查 `is_connected()`。
+
 ## 分支策略
 
 | 分支 | 用途 |

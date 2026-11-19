@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## v0.5.10 - 2026-11-19
+### Fixed
+- Cloud MIPS (`miot/miot_mips.py`): when the CONNACK of a reconnect arrives after the connection has already been closed again, it was reported as `__on_connect, but mqtt is disconnected` at ERROR level and the reconnect back off kept doubling (20s, 40s, ...) for a session that never became usable.
+  - Log it as an informational `__on_connect, connection closed during connect` instead of an error.
+  - Do not count it as a connect failure and reset the back off, so the retry happens after the minimum interval instead of a doubled one.
+  - Ignore `on_connect` callbacks of an MQTT client that has been rebuilt in the meantime.
+
+### Notes
+- Only the reconnect bookkeeping changed: the reconnect itself is still scheduled by `on_disconnect`, and publishing/subscribing keep their own `is_connected()` guard.
+
 ## v0.5.9 - 2026-11-19
 ### Added
 - Add `miot/specs/spec_standard.yaml` and the `_SpecStandard` rule set: services and properties of a device that use a vendor-owned spec URN (for example `urn:cuco-spec:service:switch:...` instead of `urn:miot-spec-v2:...`) can be declared standard per device URN, so they are no longer dropped when "hide non-standard entities" is enabled.
