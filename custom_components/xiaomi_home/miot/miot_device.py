@@ -630,6 +630,18 @@ class MIoTDevice:
 
     def parse_miot_property_entity(self, miot_prop: MIoTSpecProperty) -> bool:
         if (
+            self._model == "ainice.sensor_occupy.bt"
+            and miot_prop.service.name in {"device-group", "device"}
+            and miot_prop.name == "online-status"
+            and miot_prop.format_ is int
+            and miot_prop.readable
+            and not miot_prop.platform
+        ):
+            miot_prop.platform = "device_tracker"
+            # This vendor property has an explicit HA conversion.
+            miot_prop.proprietary = False
+            return True
+        if (
             miot_prop.platform
             or miot_prop.name not in SPEC_PROP_TRANS_MAP['properties']
         ):

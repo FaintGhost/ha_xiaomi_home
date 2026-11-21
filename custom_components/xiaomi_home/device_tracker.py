@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Copyright (C) 2024 Xiaomi Corporation.
 
@@ -45,16 +44,22 @@ off Xiaomi or its affiliates' products.
 
 Device tracker entities for Xiaomi Home.
 """
-from __future__ import annotations
-from typing import Optional
 
+from __future__ import annotations
+
+from homeassistant.components.device_tracker import SourceType, TrackerEntity
+from homeassistant.components.device_tracker.config_entry import ScannerEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.components.device_tracker import TrackerEntity
 
 from .miot.const import DOMAIN
-from .miot.miot_device import MIoTDevice, MIoTServiceEntity, MIoTEntityData
+from .miot.miot_device import (
+    MIoTDevice,
+    MIoTEntityData,
+    MIoTPropertyEntity,
+    MIoTServiceEntity,
+)
 from .miot.miot_spec import MIoTSpecProperty
 
 
@@ -63,33 +68,56 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    device_list: list[MIoTDevice] = hass.data[DOMAIN]['devices'][
-        config_entry.entry_id]
+    device_list: list[MIoTDevice] = hass.data[DOMAIN]["devices"][config_entry.entry_id]
     new_entities = []
     for miot_device in device_list:
-        for data in miot_device.entity_list.get('device_tracker', []):
+        for data in miot_device.entity_list.get("device_tracker", []):
             new_entities.append(
-                DeviceTracker(miot_device=miot_device, entity_data=data))
+                DeviceTracker(miot_device=miot_device, entity_data=data)
+            )
+        new_entities.extend(
+            PresenceTracker(miot_device, prop)
+            for prop in miot_device.prop_list.get("device_tracker", [])
+        )
     if new_entities:
         async_add_entities(new_entities)
 
 
+class PresenceTracker(MIoTPropertyEntity, ScannerEntity):
+    """Track an AInice group or member using its online-status property."""
+
+    _attr_source_type = SourceType.BLUETOOTH
+    _attr_entity_registry_enabled_default = True
+
+    @property
+    def unique_id(self) -> str:
+        return self._attr_unique_id
+
+    @property
+    def available(self) -> bool:
+        return self._attr_available and self._value in (0, 1)
+
+    @property
+    def is_connected(self) -> bool:
+        return self._value == 1
+
+
 class DeviceTracker(MIoTServiceEntity, TrackerEntity):
     """Tracker entities for Xiaomi Home."""
-    _prop_latitude: Optional[MIoTSpecProperty]
-    _prop_longitude: Optional[MIoTSpecProperty]
 
-    def __init__(self, miot_device: MIoTDevice,
-                 entity_data: MIoTEntityData) -> None:
+    _prop_latitude: MIoTSpecProperty | None
+    _prop_longitude: MIoTSpecProperty | None
+
+    def __init__(self, miot_device: MIoTDevice, entity_data: MIoTEntityData) -> None:
         super().__init__(miot_device=miot_device, entity_data=entity_data)
         self._prop_latitude = None
         self._prop_longitude = None
 
         # properties
         for prop in entity_data.props:
-            if prop.name == 'latitude':
+            if prop.name == "latitude":
                 self._prop_latitude = prop
-            elif prop.name == 'longitude':
+            elif prop.name == "longitude":
                 self._prop_longitude = prop
 
         # battery_level and location_name are no longer overridden
@@ -101,13 +129,19 @@ class DeviceTracker(MIoTServiceEntity, TrackerEntity):
         # derived from zones via latitude/longitude as core intends.
 
     @property
-    def latitude(self) -> Optional[float]:
+    def latitude(self) -> float | None:
         """The latitude coordinate of the device."""
-        return None if self._prop_latitude is None else self.get_prop_value(
-            prop=self._prop_latitude)
+        return (
+            None
+            if self._prop_latitude is None
+            else self.get_prop_value(prop=self._prop_latitude)
+        )
 
     @property
-    def longitude(self) -> Optional[float]:
+    def longitude(self) -> float | None:
         """The longitude coordinate of the device."""
-        return None if self._prop_longitude is None else self.get_prop_value(
-            prop=self._prop_longitude)
+        return (
+            None
+            if self._prop_longitude is None
+            else self.get_prop_value(prop=self._prop_longitude)
+        )
