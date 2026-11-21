@@ -47,8 +47,11 @@ Device tracker entities for Xiaomi Home.
 
 from __future__ import annotations
 
-from homeassistant.components.device_tracker import SourceType, TrackerEntity
-from homeassistant.components.device_tracker.config_entry import ScannerEntity
+from homeassistant.components.device_tracker import (
+    ScannerEntity,
+    SourceType,
+    TrackerEntity,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
