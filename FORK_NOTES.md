@@ -94,7 +94,11 @@ ERROR custom_components.xiaomi_home.miot.miot_client: mips try reconnect after 2
 - `miot/miot_spec.py`：`_SpecStandard` 增加 `is_action_standard()`，
   `__parse` 里动作的 proprietary 判断改为走放行名单（原实现是
   `spec_service.proprietary or True`，永远为真，导致放行服务里的动作仍被丢弃）。
+- `miot/specs/spec_filter.yaml` 另外排除 `3.9`（组网是否连通）：该设备未启用组网，
+  恒为 0，改为从 `status-list` 观察；同时避免它与通用 sensor 生成重复实体。
 - `miot/miot_device.py`：
+  - `append_prop()` 改为幂等：同一属性对象重复进入转换流程时只保留在一个平台列表里
+    （spec 二次转换会让同一 unique_id 生成两个实体）。
   - `parse_miot_ainice_property()`：把这些 uint8 属性映射成 switch
     （指示灯/蓝牙配对/组网开关/进群退群）和 binary_sensor
     （组网连通，device_class=connectivity）；其余走通用转换

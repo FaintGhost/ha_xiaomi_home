@@ -448,8 +448,17 @@ class MIoTDevice:
     def append_prop(self, prop: MIoTSpecProperty) -> None:
         if not prop.platform:
             return
-        self._prop_list.setdefault(prop.platform, [])
-        self._prop_list[prop.platform].append(prop)
+        # The same property object can reach this method more than once when
+        # the spec is transformed again (e.g. after a spec refresh). Keeping
+        # it in a single platform list avoids a second entity that shares the
+        # unique_id of the first one.
+        for platform, prop_list in self._prop_list.items():
+            if prop_list is not None and prop in prop_list:
+                if platform != prop.platform:
+                    prop_list.remove(prop)
+        prop_list = self._prop_list.setdefault(prop.platform, [])
+        if prop not in prop_list:
+            prop_list.append(prop)
 
     def append_event(self, event: MIoTSpecEvent) -> None:
         if not event.platform:
@@ -658,9 +667,6 @@ class MIoTDevice:
                 and miot_prop.writable):
             miot_prop.platform = 'switch'
             miot_prop.device_class = SwitchDeviceClass.SWITCH
-        elif miot_prop.name == 'mesh-reachable' and miot_prop.format_ is int:
-            miot_prop.platform = 'binary_sensor'
-            miot_prop.device_class = BinarySensorDeviceClass.CONNECTIVITY
         else:
             return False
         # This vendor property has an explicit HA conversion.

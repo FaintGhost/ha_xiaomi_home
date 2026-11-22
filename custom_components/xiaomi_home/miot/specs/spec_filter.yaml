@@ -50,6 +50,7 @@ urn:miot-spec-v2:device:motion-sensor:0000A014:xiaomi-pir1:
 urn:miot-spec-v2:device:occupancy-sensor:0000A0BF:ainice-bt:
   properties:
   - '3.3'   # 蓝牙配对密码
+  - '3.9'   # 组网是否连通（未启用组网，恒为 0，改由 status-list 观察）
   - '3.11'  # 首次激活日期（原始时间戳）
   - '3.12'  # 系统缓存版本
   - '4.4'   # 设备群绑定信息
