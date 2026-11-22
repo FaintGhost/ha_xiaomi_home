@@ -76,6 +76,47 @@ ERROR custom_components.xiaomi_home.miot.miot_client: mips try reconnect after 2
 注意：`hide_non_standard_entities` 保持 `true` 即可，不需要为了一台设备全局放开
 （全局放开会让所有设备的非标准实体一起冒出来）。
 
+### 3. AInice 电子围栏传感器完整适配（v0.5.13）
+
+背景：`ainice.sensor_occupy.bt`（电子围栏传感器）的大量能力挂在
+`urn:ainice-spec:` 私有服务上：siid 3 是通用服务（指示灯、蓝牙配对、
+蓝牙功率、组网、设备状态列表、唤醒指令），siid 4/5..8 是设备群与四个成员
+设备（在线状态、在线/离线时长、离线判定时长、上线方式、追踪模式、进群/退群）。
+开启「隐藏非标准实体」后这些全部消失，只剩在线状态和一个成员计数。
+
+改动：
+
+- `miot/specs/spec_standard.yaml`：放行 siid 3、4、5-8 以及动作 `3.1`
+  （`send-magic-package`，链路丢失时的唤醒指令）。9-18 是未启用的空槽，
+  不放行，避免空槽也生成一堆实体。
+- `miot/specs/spec_filter.yaml`：排除私密/无用属性——`3.3` 蓝牙配对密码、
+  `3.11` 激活日期、`3.12` 缓存版本、`4.4` 和各成员 `*.8` 绑定信息。
+- `miot/miot_spec.py`：`_SpecStandard` 增加 `is_action_standard()`，
+  `__parse` 里动作的 proprietary 判断改为走放行名单（原实现是
+  `spec_service.proprietary or True`，永远为真，导致放行服务里的动作仍被丢弃）。
+- `miot/miot_device.py`：
+  - `parse_miot_ainice_property()`：把这些 uint8 属性映射成 switch
+    （指示灯/蓝牙配对/组网开关/进群退群）和 binary_sensor
+    （组网连通，device_class=connectivity）；其余走通用转换
+    （`bt-power-level` 等变 select，`offline-interval`/`mesh-id` 变 number，
+    状态列表与在线/离线时长变 sensor）。
+  - `_coerce_binary()`：switch / binary_sensor 平台是用 `_value is True`
+    判断的，而厂商私有属性是 uint8，读回来是 1/0 会永远显示 off；这里在
+    读取路径把 int 归一成 bool。写入路径不变（`value_precision` 对 int 属性
+    会把 bool 处理成 1/0）。
+
+部署注意：解析结果有缓存，改完必须**删除该设备的 spec 缓存**
+（`.storage/xiaomi_home/miot_specs/urn:miot-spec-v2:device:occupancy-sensor:0000A0BF:ainice-bt:2_zh-Hans.dict`）
+并重启，否则缓存里的 `proprietary: true` 会让改动不生效。
+
+效果（该设备从 17 个实体扩到 45 个）：
+- `switch.*_indicator_switch/_bt_pair_switch/_mesh_switch/_joined_group`
+- `binary_sensor.*_mesh_reachable`、`select.*_bt_power_level/_mesh_type/_online_mode/_bt_capture_mode`
+- `number.*_offline_interval`（把默认 30 秒的离线判定改成 600 秒，直接消掉抖动误判）
+- `sensor.*_status_list`（14 个成员各 4 个字段的原始状态串，排障用）
+- `notify.*_send_magic_package_a_3_1`（唤醒：`notify.send_message` 传成员序号；
+  走 MIPS 本地转发，实测 `{"code":0,"out":[]}`）
+
 ## 同步上游的流程
 
 ```bash

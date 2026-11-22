@@ -74,6 +74,7 @@ from homeassistant.const import (
     UnitOfDataRate
 )
 from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.components.binary_sensor import BinarySensorDeviceClass
 from homeassistant.components.switch import SwitchDeviceClass
 
 
@@ -628,10 +629,51 @@ class MIoTDevice:
             miot_service.entity_category = entity_category
         return entity_data
 
+    # Properties of ainice.sensor_occupy.bt that are vendor-private
+    # (urn:ainice-spec:) and need an explicit HA conversion.
+    AINICE_SWITCH_PROPS: frozenset[str] = frozenset({
+        'indicator-switch', 'bt-pair-switch', 'mesh-switch', 'joined-group'})
+    # siid 3 is the general service, siid 4 the device group and 5..8 the
+    # member devices in use. The remaining member slots (9..18) are empty and
+    # stay proprietary, so they keep following "hide non-standard entities".
+    AINICE_USED_SIIDS: frozenset[int] = frozenset({3, 4, 5, 6, 7, 8})
+
+    def parse_miot_ainice_property(self, miot_prop: MIoTSpecProperty) -> bool:
+        """Convert the vendor-private fencing properties of AInice.
+
+        siid 3 (general-service) and siid 4/5..8 (the member devices) use
+        urn:ainice-spec: URNs, so they are flagged proprietary and dropped
+        even when specs/spec_standard.yaml keeps them. Give the binary ones a
+        switch or binary_sensor platform; the rest falls through to the
+        generic conversion (number/select/sensor).
+        """
+        if self._model != "ainice.sensor_occupy.bt":
+            return False
+        if miot_prop.platform:
+            return True
+        if miot_prop.service.iid not in self.AINICE_USED_SIIDS:
+            return False
+        if (miot_prop.name in self.AINICE_SWITCH_PROPS
+                and miot_prop.format_ is int
+                and miot_prop.writable):
+            miot_prop.platform = 'switch'
+            miot_prop.device_class = SwitchDeviceClass.SWITCH
+        elif miot_prop.name == 'mesh-reachable' and miot_prop.format_ is int:
+            miot_prop.platform = 'binary_sensor'
+            miot_prop.device_class = BinarySensorDeviceClass.CONNECTIVITY
+        else:
+            return False
+        # This vendor property has an explicit HA conversion.
+        miot_prop.proprietary = False
+        return True
+
     def parse_miot_property_entity(self, miot_prop: MIoTSpecProperty) -> bool:
+        if self.parse_miot_ainice_property(miot_prop=miot_prop):
+            return True
         if (
             self._model == "ainice.sensor_occupy.bt"
             and miot_prop.service.name in {"device-group", "device"}
+            and miot_prop.service.iid in self.AINICE_USED_SIIDS
             and miot_prop.name == "online-status"
             and miot_prop.format_ is int
             and miot_prop.readable
@@ -1341,6 +1383,22 @@ class MIoTPropertyEntity(Entity):
     def device_info(self) -> Optional[DeviceInfo]:
         return self.miot_device.device_info
 
+    def _coerce_binary(self, value: Any) -> Any:
+        """Normalise vendor 0/1 integer properties used as on/off entities.
+
+        The switch and binary_sensor platforms compare with ``is True``, but
+        vendor-private specs often declare plain uint8 properties (e.g. the
+        AInice fencing switches). Reading them back as booleans keeps those
+        entities honest; writing still goes out as 1/0 because bool passes
+        ``value_precision`` unchanged for int properties.
+        """
+        if value is None:
+            return None
+        if (self.spec.format_ is int
+                and self.spec.platform in ('switch', 'binary_sensor')):
+            return bool(value)
+        return value
+
     async def async_added_to_hass(self) -> None:
         # Sub device state changed
         self._state_sub_id = self.miot_device.sub_device_state(
@@ -1389,7 +1447,7 @@ class MIoTPropertyEntity(Entity):
         except MIoTClientError as e:
             raise RuntimeError(
                 f'{e}, {self.entity_id}, {self.name}') from e
-        self._value = value
+        self._value = self._coerce_binary(value)
         self.async_write_ha_state()
         return True
 
@@ -1405,13 +1463,14 @@ class MIoTPropertyEntity(Entity):
                 piid=self.spec.iid))
         value = self.spec.eval_expr(value)
         result = self.spec.value_precision(value)
-        return result
+        return self._coerce_binary(result)
 
     def __on_value_changed(self, params: dict, ctx: Any) -> None:
         _LOGGER.debug('property changed, %s', params)
         value: Any = self.spec.value_format(params['value'])
         value = self.spec.eval_expr(value)
-        self._value = self.spec.value_precision(value)
+        self._value = self._coerce_binary(
+            self.spec.value_precision(value))
         if not self._pending_write_ha_state_timer:
             self.async_write_ha_state()
 

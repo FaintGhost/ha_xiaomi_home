@@ -47,6 +47,26 @@ urn:miot-spec-v2:device:motion-sensor:0000A014:xiaomi-pir1:
   services:
   - '1'
   - '5'
+urn:miot-spec-v2:device:occupancy-sensor:0000A0BF:ainice-bt:
+  properties:
+  - '3.3'   # 蓝牙配对密码
+  - '3.11'  # 首次激活日期（原始时间戳）
+  - '3.12'  # 系统缓存版本
+  - '4.4'   # 设备群绑定信息
+  - '5.8'
+  - '6.8'
+  - '7.8'
+  - '8.8'
+  - '9.8'
+  - '10.8'
+  - '11.8'
+  - '12.8'
+  - '13.8'
+  - '14.8'
+  - '15.8'
+  - '16.8'
+  - '17.8'
+  - '18.8'  # 5.8-18.8 各成员绑定信息
 urn:miot-spec-v2:device:speaker:0000A015:xiaomi-l15a:
   properties:
   - '3.3'

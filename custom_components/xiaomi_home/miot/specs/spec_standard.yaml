@@ -12,3 +12,21 @@ urn:miot-spec-v2:device:outlet:0000A002:cuco-cp2ad:
   services:
   - "3"
   - "4"
+
+# ainice.sensor_occupy.bt 电子围栏传感器：siid 3 是 urn:ainice-spec: 的通用服务
+# （指示灯、蓝牙配对、蓝牙功率、组网、设备状态列表），siid 4 是设备群，siid 5-18
+# 是每个成员设备（在线状态、在线/离线时长、离线判定、追踪模式等）。这些都是厂商
+# 私有 URN，开启「隐藏非标准实体」时会被整体丢弃，这里显式放行。
+# 只放行 5-8（实际在用的四个成员），9-18 是未启用的空槽，保持隐藏以免每个空槽
+# 也生成 8 个实体。3.1 是「发送唤醒指令」动作，用于链路丢失时软恢复。
+# 过于私密或没有使用价值的属性在 specs/spec_filter.yaml 里再排除。
+urn:miot-spec-v2:device:occupancy-sensor:0000A0BF:ainice-bt:
+  services:
+  - "3"
+  - "4"
+  - "5"
+  - "6"
+  - "7"
+  - "8"
+  actions:
+  - "3.1"

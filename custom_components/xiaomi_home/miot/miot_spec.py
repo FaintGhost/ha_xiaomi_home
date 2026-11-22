@@ -1113,8 +1113,8 @@ class _SpecStandard:
     dropped when ``hide_non_standard_entities`` is enabled, so the extra
     ports become unreachable from Home Assistant.
 
-    ``specs/spec_standard.yaml`` lists, per device URN, the services and
-    properties that must be kept anyway. The format matches
+    ``specs/spec_standard.yaml`` lists, per device URN, the services,
+    properties and actions that must be kept anyway. The format matches
     ``spec_filter.yaml`` but with the opposite meaning:
 
     .. code-block:: yaml
@@ -1124,6 +1124,8 @@ class _SpecStandard:
           - "3"
           - "4"
           properties:
+          - "3.1"
+          actions:
           - "3.1"
 
     The key is the first six segments of the URN (without the version).
@@ -1178,6 +1180,14 @@ class _SpecStandard:
         if (self._cache and 'properties' in self._cache and
                 (f'{siid}.{piid}' in self._cache['properties'] or
                  f'{siid}.*' in self._cache['properties'])):
+            return True
+        return False
+
+    def is_action_standard(self, siid: int, aiid: int) -> bool:
+        """MUST call init_async() and set_spec_spec() first."""
+        if (self._cache and 'actions' in self._cache and
+                (f'{siid}.{aiid}' in self._cache['actions'] or
+                 f'{siid}.*' in self._cache['actions'])):
             return True
         return False
 
@@ -1683,8 +1693,10 @@ class MIoTSpecParser:
                      if 'need_filter' not in action else action['need_filter']))
                 if spec_action.need_filter:
                     continue
-                if a_type_strs[1] != 'miot-spec-v2':
-                    spec_action.proprietary = spec_service.proprietary or True
+                if a_type_strs[1] != 'miot-spec-v2' and not (
+                        self._spec_standard.is_action_standard(
+                            siid=service['iid'], aiid=action['iid'])):
+                    spec_action.proprietary = True
                 spec_action.description_trans = (
                     self._multi_lang.translate(
                         f'a:{service["iid"]}:{action["iid"]}') or
