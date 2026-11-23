@@ -877,6 +877,27 @@ class MIoTLan:
         raise MIoTError('Invalid result', MIoTErrorCode.CODE_INTERNAL_ERROR)
 
     @final
+    async def raw_rpc_async(
+        self, did: str, method: str, params: Any = None,
+        timeout_ms: int = 10000
+    ) -> dict:
+        """Call a device-private RPC method over the LAN channel."""
+        self.__assert_service_ready()
+        msg: dict = {'method': method}
+        if params is not None:
+            msg['params'] = params
+        result_obj = await self.__call_api_async(
+            did=did, msg=msg, timeout_ms=timeout_ms)
+        if result_obj:
+            if 'result' in result_obj:
+                return {'code': 0, 'result': result_obj['result']}
+            if 'code' in result_obj:
+                return result_obj
+        return {
+            'code': MIoTErrorCode.CODE_INTERNAL_ERROR.value,
+            'message': 'Invalid result'}
+
+    @final
     async def get_dev_list_async(
         self, timeout_ms: int = 10000
     ) -> dict[str, dict]:

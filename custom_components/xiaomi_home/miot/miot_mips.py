@@ -1439,6 +1439,37 @@ class MipsLocalClient(_MipsClient):
             'message': 'Invalid result'}
 
     @final
+    async def raw_rpc_async(
+        self, did: str, method: str, params: Any = None,
+        timeout_ms: int = 10000
+    ) -> dict:
+        """Call a device-private RPC method.
+
+        Some capabilities are not part of the MIoT spec at all: the Mi Home
+        plugin reaches them through ``Device.getDeviceWifi().callMethod()``,
+        e.g. ``rpcReboot`` on the AInice fencing sensor. They travel over the
+        same MIPS request envelope as spec actions, only the method name and
+        params differ.
+        """
+        rpc_obj: dict = {'id': self.__gen_mips_id, 'method': method}
+        if params is not None:
+            rpc_obj['params'] = params
+        payload_obj: dict = {'did': did, 'rpc': rpc_obj}
+        result_obj = await self.__request_async(
+            topic='proxy/rpcReq', payload=json.dumps(payload_obj),
+            timeout_ms=timeout_ms)
+        if result_obj:
+            if 'result' in result_obj:
+                result = result_obj['result']
+                return result if isinstance(result, dict) else {
+                    'code': 0, 'result': result}
+            if 'error' in result_obj:
+                return result_obj['error']
+        return {
+            'code': MIoTErrorCode.CODE_INTERNAL_ERROR.value,
+            'message': 'Invalid result'}
+
+    @final
     async def get_dev_list_async(
         self, payload: Optional[str] = None, timeout_ms: int = 10000
     ) -> Optional[dict[str, dict]]:

@@ -835,6 +835,41 @@ class MIoTClient:
             'client action failed, %s.%d.%d', did, siid, aiid)
         return []
 
+    async def rpc_async(
+        self, did: str, method: str, params: Any = None,
+        timeout_ms: int = 10000
+    ) -> dict:
+        """Call a device-private RPC method (not part of the MIoT spec).
+
+        The Mi Home plugin uses ``Device.getDeviceWifi().callMethod()`` for
+        these, for example ``rpcReboot``. Routing matches action_async: MIPS
+        local, then LAN, then cloud MIPS.
+        """
+        if did not in self._device_list_cache:
+            raise MIoTClientError(f'did not exist, {did}')
+        device_gw = self._device_list_gateway.get(did, None)
+        if self._ctrl_mode == CtrlMode.AUTO:
+            if (
+                device_gw and device_gw.get('online', False)
+                and device_gw.get('specv2_access', False)
+                and 'group_id' in device_gw
+            ):
+                mips = self._mips_local.get(device_gw['group_id'], None)
+                if mips is None:
+                    raise MIoTClientError(f'no gw route, {did}')
+                return await mips.raw_rpc_async(
+                    did=did, method=method, params=params,
+                    timeout_ms=timeout_ms)
+            device_lan = self._device_list_lan.get(did, None)
+            if device_lan and device_lan.get('online', False):
+                return await self._miot_lan.raw_rpc_async(
+                    did=did, method=method, params=params,
+                    timeout_ms=timeout_ms)
+        if self._mips_cloud is None:
+            raise MIoTClientError('mips cloud not ready')
+        return await self._mips_cloud.raw_rpc_async(
+            did=did, method=method, params=params, timeout_ms=timeout_ms)
+
     def sub_prop(
         self, did: str, handler: Callable[[dict, Any], None],
         siid: Optional[int] = None, piid: Optional[int] = None,

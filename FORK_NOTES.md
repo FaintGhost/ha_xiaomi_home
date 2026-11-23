@@ -123,6 +123,37 @@ ERROR custom_components.xiaomi_home.miot.miot_client: mips try reconnect after 2
 - `notify.*_send_magic_package_a_3_1`（唤醒：`notify.send_message` 传成员序号；
   走 MIPS 本地转发，实测 `{"code":0,"out":[]}`）
 
+### 4. 通用私有 RPC 服务（v0.5.16）
+
+米家插件里有些能力不是 miot-spec 动作，而是 `Device.getDeviceWifi().callMethod()`
+形式的设备私有 RPC（在 AInice 围栏传感器的插件包里可以看到 `rpcReboot`、
+`rpcMeshList`、`rpcFixDate`、`rpcExchange`）。它们与 spec 动作共用同一套 MIPS
+信封，只是 `method` 名和参数不同。
+
+改动：
+
+- `miot/miot_mips.py`：`MIoTMips.raw_rpc_async()`，按 `{did, rpc:{id, method, params}}`
+  组装请求，本地/云端客户端都继承。
+- `miot/miot_lan.py`：`MIoTLan.raw_rpc_async()`，局域网通道同理。
+- `miot/miot_client.py`：`rpc_async()` 按 MIPS 本地 → 局域网 → 云 MIPS 的顺序路由。
+- `__init__.py`：注册服务 `xiaomi_home.rpc`（字段 `did` / `method` / `params`，
+  支持 `return_response`）。
+
+用法：
+
+```yaml
+service: xiaomi_home.rpc
+data:
+  did: "919629224"
+  method: rpcReboot
+```
+
+注意：AInice 围栏传感器的 `rpcReboot` 实际走的是**局域网 miIO（UDP 54321）**，
+不走 MIPS（云端与 MIPS 都会超时）。所以这台设备的自动重启由
+`/config/pyscript/ainice.py` 的 `pyscript.ainice_reboot` 实现（广播 hello 发现 IP →
+python-miio 发 `rpcReboot` → 用 `miIO.info` 的 `life` 字段验证确实重启），
+`xiaomi_home.rpc` 只是为其他设备的私有 RPC 留的通用通道。
+
 ## 同步上游的流程
 
 ```bash

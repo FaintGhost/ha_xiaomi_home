@@ -46,11 +46,13 @@ off Xiaomi or its affiliates' products.
 The Xiaomi Home integration Init File.
 """
 from __future__ import annotations
+import json
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
+import voluptuous as vol
 from homeassistant.components import persistent_notification
 from homeassistant.helpers import config_validation as cv, device_registry, entity_registry
 
@@ -70,6 +72,31 @@ _LOGGER = logging.getLogger(__name__)
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 
+SERVICE_RPC_SCHEMA = vol.Schema({
+    vol.Required('did'): cv.string,
+    vol.Required('method'): cv.string,
+    vol.Optional('params'): vol.Any(None, dict, list, cv.string),
+})
+
+
+async def async_handle_rpc_call(call: ServiceCall) -> dict:
+    """Send a device-private RPC (the ones the Mi Home plugin calls)."""
+    did: str = call.data['did']
+    method: str = call.data['method']
+    params: Any = call.data.get('params')
+    if isinstance(params, str):
+        params = json.loads(params) if params.strip() else None
+    for client in call.hass.data[DOMAIN]['miot_clients'].values():
+        try:
+            return await client.rpc_async(
+                did=did, method=method, params=params)
+        except Exception as err:  # pylint: disable=broad-exception-caught
+            if 'did not exist' in str(err):
+                continue
+            return {'code': -1, 'message': str(err)}
+    return {'code': -1, 'message': f'did not found, {did}'}
+
+
 async def async_setup(hass: HomeAssistant, hass_config: dict) -> bool:
     # pylint: disable=unused-argument
     hass.data.setdefault(DOMAIN, {})
@@ -81,8 +108,10 @@ async def async_setup(hass: HomeAssistant, hass_config: dict) -> bool:
     hass.data[DOMAIN].setdefault('entities', {})
     for platform in SUPPORTED_PLATFORMS:
         hass.data[DOMAIN]['entities'][platform] = []
+    hass.services.async_register(
+        DOMAIN, 'rpc', async_handle_rpc_call, schema=SERVICE_RPC_SCHEMA,
+        supports_response=SupportsResponse.ONLY)
     return True
-
 
 def migrate_service_unique_id(
     er: entity_registry.EntityRegistry,
