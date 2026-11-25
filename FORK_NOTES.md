@@ -154,6 +154,13 @@ data:
 python-miio 发 `rpcReboot` → 用 `miIO.info` 的 `life` 字段验证确实重启），
 `xiaomi_home.rpc` 只是为其他设备的私有 RPC 留的通用通道。
 
+### 5. 内置服务需要 services.yaml（v0.5.17）
+
+上游没有 `services.yaml`，所以 v0.5.16 注册的 `xiaomi_home.rpc` 会让 HA 在读取
+服务描述时报 `Failed to load services.yaml for integration: xiaomi_home`
+（来源 `homeassistant.helpers.service`）。v0.5.17 补上描述文件，字段与
+`SERVICE_RPC_SCHEMA` 一一对应（`did` / `method` / `params`）。
+
 ## 同步上游的流程
 
 ```bash

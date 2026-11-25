@@ -1,0 +1,32 @@
+# Descriptions for the services this integration registers.
+# Home Assistant loads this file to render the action in the UI; a service
+# registered without it logs "Failed to load services.yaml for integration".
+rpc:
+  name: 设备私有 RPC
+  description: >-
+    调用米家插件里 Device.getDeviceWifi().callMethod() 那类设备私有方法，
+    例如 rpcReboot、rpcMeshList、rpcFixDate、rpcExchange。
+    返回值通过响应返回（supports_response=only）。
+  fields:
+    did:
+      name: 设备 DID
+      description: 目标设备的 did，可在集成设备列表里找到。
+      required: true
+      example: "919629224"
+      selector:
+        text:
+    method:
+      name: RPC 方法名
+      description: 设备私有方法名，不带参数。
+      required: true
+      example: rpcReboot
+      selector:
+        text:
+    params:
+      name: 参数
+      description: >-
+        方法参数。多数私有 RPC 传 null；需要时填 JSON 对象或数组
+        （字符串会被解析为 JSON）。
+      example: '{"srcIdx": 1, "dstIdx": 2}'
+      selector:
+        object:
